@@ -1,0 +1,28 @@
+{
+  "name": "sockdrawer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "tsx scripts/test-local-rag.ts && tsx scripts/test-local-memory.ts && tsx scripts/test-extract.ts && tsx scripts/test-pwa.ts",
+    "lint": "eslint src scripts next.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.2.9",
+    "pdfjs-dist": "^6.1.200",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}

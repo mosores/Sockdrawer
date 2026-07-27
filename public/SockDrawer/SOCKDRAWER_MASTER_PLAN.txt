@@ -1,0 +1,252 @@
+SOCKDRAWER PHONE-LOCAL RAG - MASTER PLAN
+Version: 1.0
+Status: Implemented MVP
+
+1. PRODUCT OUTCOME
+
+SockDrawer is an Android-first installable PWA for saving links, notes, and
+files with no manual organization. All library data, files, archives, chunks,
+and retrieval vectors live in Android Chrome storage. Retrieval happens on the
+phone. The user deliberately shares only a bounded question-and-source packet
+to the existing ChatGPT mobile app.
+
+The deployed server stores no library content. Vercel hosts the PWA and one
+protected, stateless public-webpage extraction endpoint.
+
+2. SYSTEM ARCHITECTURE
+
+  Android Share Target / Add material
+                  |
+                  v
+       +-----------------------+
+       | Installed SockDrawer  |
+       | PWA in Android Chrome |
+       +-----------+-----------+
+                   |
+          +--------+---------+
+          |                  |
+          v                  v
+  IndexedDB              Origin Private File System
+  - memories             sockdrawer/YYYY/MM/
+  - chunks               - item-id.txt
+  - settings             - item-id--original.ext
+          |                  |
+          +--------+---------+
+                   |
+                   v
+      deterministic local processing
+      - metadata heuristics
+      - 500-word chunks / 60 overlap
+      - 512-d signed hashing vectors
+      - local ranking and source selection
+                   |
+                   v
+        Android Share sheet -> ChatGPT app
+
+  Public URL only:
+
+  SockDrawer -> POST /api/extract on Vercel -> public webpage
+              access key + SSRF controls       no retained content
+
+3. STORAGE MODEL
+
+IndexedDB database: memoria-local, schema version 2
+
+memories store
+  key: id
+  unique indexes: clientRequestId, dedupeKey
+  fields: type, input, source, title, summary, category, tags, status,
+          extracted content, archive path, original file path and metadata,
+          timestamps, checksum
+
+chunks store
+  key: memoryId:index
+  index: memoryId
+  fields: text, position, 512-number normalized vector
+
+settings store
+  key: key
+  fields: value
+  current settings: extractorAccessKey, lastBackupAt
+
+The legacy outbox store is read during the first schema upgrade. Each queued
+capture is written into the new durable stores and OPFS before its outbox entry
+is removed.
+
+4. DURABILITY RULES
+
+- A save is acknowledged only after the canonical archive, original file when
+  present, memory record, and initial chunk records commit.
+- OPFS writable streams use safe close/abort behavior.
+- Failed cross-store captures remove newly written orphan files.
+- Each original file is limited to 25 MB.
+- The app requests persistent browser storage and displays quota, usage, and
+  last-backup state.
+- Users can export and import a complete versioned JSON backup containing
+  memory records, chunks, settings, TXT archives, and Base64 original files.
+- Import validates schema, dates, types, MIME values, checksums, file sizes,
+  record uniqueness, file completeness, and safe sockdrawer/YYYY/MM paths
+  before writing.
+- Import never silently overwrites existing or overlapping material.
+
+5. CAPTURE AND PROCESSING
+
+Text and URL capture
+  1. Detect HTTP/HTTPS URL or note.
+  2. Normalize URLs and remove tracking parameters for deduplication.
+  3. Persist immediately with a provisional archive.
+  4. Return success to the user.
+  5. Process locally after the durable save.
+
+File capture
+  1. Persist the original file and provisional archive.
+  2. Parse TXT, Markdown, CSV, JSON, XML, HTML, JavaScript, and TypeScript as
+     local text.
+  3. Lazy-load pdfjs-dist only for PDFs and extract selectable text locally.
+  4. Keep images and unsupported files available for opening without OCR.
+
+Public links
+  1. Keep the URL locally even when offline or when no extractor key exists.
+  2. When online, call the protected stateless extractor.
+  3. Resume pending/abandoned processing on app startup, reconnect, visibility,
+     refresh, or manual retry.
+
+Local organization
+  - deterministic title, summary, category, and keyword-frequency tags
+  - no hosted LLM or embedding API
+  - status values: pending, processing, ready, needs_review, failed
+
+6. RETRIEVAL AND CHATGPT HANDOFF
+
+- Normalize query words, accents, and case.
+- Hash words and bigrams into a deterministic signed 512-d vector.
+- Rank chunks using cosine similarity plus exact-token, bigram, and phrase
+  bonuses.
+- Select one strongest chunk from each of at most six unique memories.
+- Number sources as [1] through [6].
+- Limit supplied source context to 12,000 characters.
+- Instruct ChatGPT to use only supplied sources, cite factual claims, treat
+  source text as untrusted data, avoid outside knowledge, and state exactly
+  when evidence is insufficient.
+- Use navigator.share for the Android Share sheet.
+- Fall back to the clipboard when Web Share is unavailable or rejected.
+- Provide the same manual Share action on individual library cards.
+
+7. STATELESS EXTRACTOR SECURITY
+
+Endpoint: POST /api/extract
+Header: x-memoria-key
+Input: { url }
+Output: { title, content, sourceDomain, canonicalUrl }
+
+Controls:
+  - production requires MEMORIA_ACCESS_KEY
+  - timing-safe key comparison
+  - HTTP/HTTPS only; no embedded credentials
+  - literal and DNS-resolved private/unsafe addresses rejected
+  - DNS-pinned requests mitigate rebinding
+  - every redirect revalidated; maximum five redirects
+  - HTML/XHTML only
+  - declared and streamed response size capped at 2 MB
+  - 12-second timeout
+  - scripts, styles, SVG, and noscript content removed
+  - no database, logs of content, or retained page data
+  - Cache-Control: no-store
+
+8. PWA AND PHONE UX
+
+- Existing Save, Review, Library, and Recall navigation retained.
+- Android GET Share Target retained for URL/text ingestion.
+- 192px and 512px launcher icons retained.
+- viewport safe areas, 44px controls, focus states, dark mode, and
+  reduced-motion behavior retained.
+- Service worker caches the shell and lazy client assets while excluding APIs.
+- Review contains storage protection, quota, backup/import, clear-library, and
+  extractor-key controls.
+- Recall previews selected local sources before or after Android sharing.
+
+9. SOURCE TREE
+
+src/components/memory-app.tsx
+  Phone UI, capture orchestration, background resume, backup, and sharing.
+
+src/lib/local-memory.ts
+  IndexedDB, OPFS, deduplication, archives, backup/import, settings.
+
+src/lib/local-file-extract.ts
+  Local text and PDF extraction.
+
+src/lib/local-processing.ts
+  Deterministic title, summary, category, and tags.
+
+src/lib/local-rag.ts
+  Embeddings, ranking, source selection, ChatGPT packet.
+
+src/lib/chunks.ts
+  500-word chunks with 60-word overlap.
+
+src/app/api/extract/route.ts
+src/lib/extract.ts
+src/lib/url.ts
+src/lib/auth.ts
+  Stateless protected extractor.
+
+public/manifest.webmanifest
+public/sw.js
+  Android installation, share target, and offline shell.
+
+scripts/test-local-memory.ts
+scripts/test-local-rag.ts
+scripts/test-extract.ts
+scripts/test-pwa.ts
+  Minimal runnable verification.
+
+10. DEPLOYMENT
+
+Required:
+  - free Vercel account
+  - Chrome on Android
+  - ChatGPT Android app
+  - one MEMORIA_ACCESS_KEY shared between Vercel and the phone
+
+Not required:
+  - Docker
+  - PostgreSQL or vector database
+  - Android Studio or APK build tools
+  - Tailscale
+  - OpenAI/Groq API key
+  - always-on personal computer
+
+Exact deployment and phone installation instructions are in README.md.
+
+11. RELEASE VERIFICATION
+
+Automated:
+  - URL normalization and unsafe-address detection
+  - deterministic organization, chunking, embeddings, ranking, citations,
+    six-source cap, context cap, and insufficient-evidence packet
+  - TXT, Markdown, CSV, unsupported binary, selectable-text PDF, and 25 MB cap
+  - backup schema, binary content, path traversal, MIME, type, and size checks
+  - extractor auth, private targets, unsafe redirects, unsupported MIME,
+    oversized pages, cleaning, and canonical URLs
+  - PWA manifest, icons, share target, service worker, CSP, and obsolete-stack
+    removal
+  - TypeScript, ESLint, production build, and dependency audit
+
+Manual Android release check:
+  - install from Chrome
+  - save note, link, TXT, and PDF
+  - capture offline and resume link processing after reconnect
+  - retrieve a known answer and inspect local sources
+  - share to ChatGPT and verify clipboard fallback
+  - export backup, clear test data, import, and confirm recovery
+
+12. INTENTIONAL MVP LIMITS
+
+- No OCR for screenshot or scan-only PDF content.
+- No direct Android file Share Target; use Add material.
+- No cloud sync or multi-device library.
+- No automatic MCP/ChatGPT library access.
+- No server-side memory storage.
+
+Add these only when real use proves they are needed.

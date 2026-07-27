@@ -1,0 +1,13 @@
+node_modules
+node_modules.partial
+node_modules.partial2
+.next
+.git
+.npm-cache
+.vercel
+.verify
+.agents
+.codex
+.impeccable
+*.tsbuildinfo
+.env.local
