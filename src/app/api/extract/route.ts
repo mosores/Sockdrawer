@@ -20,6 +20,8 @@ async function proxyToVercel(request: Request, origin: string): Promise<Response
   }
   const body = await request.text();
   if (new TextEncoder().encode(body).byteLength > MAX_PROXY_BODY_BYTES) return json({ error: "The request is too large." }, 413);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 13_000);
   const response = await fetch(target, {
     method: "POST",
     headers: {
@@ -29,8 +31,8 @@ async function proxyToVercel(request: Request, origin: string): Promise<Response
     body,
     cache: "no-store",
     redirect: "error",
-    signal: AbortSignal.timeout(13_000),
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
   return new Response(response.body, {
     status: response.status,
     headers: {
