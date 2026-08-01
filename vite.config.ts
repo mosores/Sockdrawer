@@ -13,7 +13,7 @@ export default defineConfig(async () => {
         config: {
           main: "./worker/index.ts",
           compatibility_date: "2026-08-01",
-          compatibility_flags: ["nodejs_compat"],
+          compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"],
         },
       }),
     ],
