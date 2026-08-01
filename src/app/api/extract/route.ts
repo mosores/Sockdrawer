@@ -42,7 +42,10 @@ export async function POST(request: Request) {
   const extractorOrigin = process.env.MEMORIA_EXTRACTOR_ORIGIN?.trim();
   if (extractorOrigin) {
     try { return await proxyToVercel(request, extractorOrigin); }
-    catch { return json({ error: "The link reader is unavailable." }, 502); }
+    catch (error) {
+      console.error("Extractor proxy failed:", error instanceof Error ? `${error.name}: ${error.message}` : "Unknown error");
+      return json({ error: "The link reader is unavailable." }, 502);
+    }
   }
   if (!process.env.MEMORIA_ACCESS_KEY) {
     return json({ error: "MEMORIA_ACCESS_KEY is not configured." }, 503);
