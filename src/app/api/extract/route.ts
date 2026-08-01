@@ -29,7 +29,6 @@ async function proxyToVercel(request: Request, origin: string): Promise<Response
       "x-memoria-key": request.headers.get("x-memoria-key") ?? "",
     },
     body,
-    cache: "no-store",
     redirect: "error",
     signal: controller.signal,
   }).finally(() => clearTimeout(timeout));
